@@ -10,6 +10,10 @@ IMAGE_PADDING = 10
 LINE_CHAR_LIMIT = 150
 # The desired ratio of width to height (the number of "widths" for each "height").
 TARGET_ASPECT_RATIO = 1
+# 6 is a good default because it's small, but still readable (barely). If the program is taking a long time
+# (~20+ seconds) to run, you probably need to reduce this - the image will be too big to reasonably load anyway.
+FONT_SIZE = 6
+MONOSPACE_FONT_PATH = "/usr/share/fonts/truetype/ubuntu/UbuntuMono[wght].ttf"
 
 
 def main():
@@ -26,7 +30,7 @@ def main():
         text=repo_contents,
         output_image_path="text_visualization.png",
         # adjust for your computer - should point to a monospace font
-        font_path="/usr/share/fonts/truetype/ubuntu/UbuntuMono[wght].ttf"
+        font_path=MONOSPACE_FONT_PATH
     )
 
 
@@ -37,8 +41,8 @@ def assemble_repository_into_string(repo_path: str) -> str:
         print("Error: Path must be a directory.")
         exit(1)
 
-    branch_name = run_command("git branch --show-current")
-    repo_filenames = run_command(f"git ls-tree -r {branch_name} --name-only").split("\n")
+    branch_name = run_command("git branch --show-current", repo_path)
+    repo_filenames = run_command(f"git ls-tree -r {branch_name} --name-only", repo_path).split("\n")
 
     for repo_filename in repo_filenames:
         print(f'Reading {repo_filename}')
@@ -56,27 +60,27 @@ def assemble_repository_into_string(repo_path: str) -> str:
 """
 
         try:
-            with open(repo_path + "/" + repo_filename, 'r', encoding='utf-8') as repo_file:
+            with open(f'{repo_path}/{repo_filename}', 'r', encoding='utf-8') as repo_file:
                 assembled_string += repo_file.read()
         except UnicodeDecodeError:
             assembled_string += '(Binary file)'
+        except IsADirectoryError:
+            assembled_string += '(Is a directory - possibly a submodule)'
 
     print('All files read.')
 
     return assembled_string
 
 
-def run_command(command: str) -> str:
-    # os.popen(command).read()
-    # return subprocess.call(command, text=True)
-    process = subprocess.Popen(command.split(' '), stdout=subprocess.PIPE, text=True)
+def run_command(command: str, cwd: str = None) -> str:
+    process = subprocess.Popen(command.split(' '), cwd=cwd, stdout=subprocess.PIPE, text=True)
     return process.stdout.read().strip()
 
 
 def text_to_image(text: str, output_image_path: str, font_path: str = None):
     # Load the font
     try:
-        font = ImageFont.truetype(font_path or "error", 12)
+        font = ImageFont.truetype(font_path or "error", FONT_SIZE)
     except IOError:
         print(
             "Font not found. Using default PIL font, but this is not a monospace font - things will not line up perfectly.")
