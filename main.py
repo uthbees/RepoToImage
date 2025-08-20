@@ -1,8 +1,12 @@
+from math import ceil
+
 from PIL import Image, ImageDraw, ImageFont
 import textwrap
 
 IMAGE_PADDING = 10
 LINE_CHAR_LIMIT = 150
+# The desired ratio of width to height (the number of "widths" for each "height").
+TARGET_ASPECT_RATIO = 0.5
 
 
 def text_to_image(text_file_path, output_image_path, font_path=None):
@@ -32,21 +36,73 @@ def text_to_image(text_file_path, output_image_path, font_path=None):
     for line in original_lines:
         wrapped_line = textwrap.wrap(line, width=LINE_CHAR_LIMIT)
         wrapped_lines += wrapped_line
+    lines_count = len(wrapped_lines)
 
-    # Create image and draw context now that we know the needed height
-    image_width = int(line_width + IMAGE_PADDING * 2)
-    image_height = int(len(wrapped_lines) * line_height + IMAGE_PADDING * 2)
+    columns = calculate_optimal_columns(line_width, line_height, lines_count)
+    lines_per_column = ceil(lines_count / columns)
+
+    # Create image and draw context now that we know the needed height and columns
+    image_width = int(line_width * columns + IMAGE_PADDING * (columns + 1))
+    image_height = int(lines_per_column * line_height + IMAGE_PADDING * 2)
     img = Image.new('RGB', (image_width, image_height), color='white')
     draw = ImageDraw.Draw(img)
 
     # Draw the text using the same wrapping configuration
+    current_line_num = 1
     for line in wrapped_lines:
         draw.text((x_pos, y_pos), line, fill='black', font=font)
         y_pos += line_height
 
+        current_line_num += 1
+        if current_line_num > lines_per_column:
+            current_line_num = 1
+            x_pos += line_width + IMAGE_PADDING
+            y_pos = IMAGE_PADDING
+
     # Save the final image
     img.save(output_image_path)
     print(f"Image saved successfully to {output_image_path}")
+
+
+def calculate_optimal_columns(line_width, line_height, lines_count):
+    """
+    Calculates the optimal number of columns to achieve a target aspect ratio.
+    """
+
+    if line_height <= 0 or line_width <= 0:
+        print("Error: Line height and width must be positive values.")
+        exit(1)
+
+    # Initialize variables to track the best result
+    best_columns = 0
+    best_difference_from_target = float('inf')
+    current_tested_columns = 0
+
+    while True:
+        current_tested_columns += 1
+
+        total_width = current_tested_columns * line_width
+
+        # The total number of lines must be an integer. Round up because lines use the full height even if they don't
+        # use the full width.
+        lines_per_column = ceil(lines_count / current_tested_columns)
+
+        # Calculate the actual height based on the integer number of lines.
+        total_height = lines_per_column * line_height
+
+        # Calculate the actual aspect ratio for this number of columns.
+        current_aspect_ratio = total_width / total_height
+
+        # Calculate the absolute difference between the current ratio and the target.
+        difference = abs(current_aspect_ratio - TARGET_ASPECT_RATIO)
+
+        # If this difference is the smallest so far, we have a new best result.
+        if difference < best_difference_from_target:
+            best_difference_from_target = difference
+            best_columns = current_tested_columns
+        else:
+            # We started at the minimum, so once it stops improving, we know we've found the best possible result.
+            return best_columns
 
 
 if __name__ == "__main__":
@@ -56,11 +112,12 @@ if __name__ == "__main__":
         f.write("This is a test paragraph with some text. This is a test paragraph with some text. " * 20 + "\n")
         f.write(
             "This is a second paragraph. " * 20 + "\n")
-        f.write("And here is a third paragraph. The patterns of these paragraphs should be visible in the image. " * 20)
+        f.write("And here is a third paragraph. The patterns of these paragraphs should be visible in the image. " * 20 + "\n")
+        f.write("z " * 20000)
 
     # Run the function
     text_to_image(
         text_file_path="sample_text.txt",
         output_image_path="text_visualization.png",
-        font_path="/usr/share/fonts/truetype/ubuntu/UbuntuMono[wght].ttf"
+        font_path="/usr/share/fonts/truetype/ubuntu/UbuntuMono[wght].ttf" # adjust for your computer - should be monospace
     )
