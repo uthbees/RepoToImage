@@ -29,7 +29,6 @@ def main():
     text_to_image(
         text=repo_contents,
         output_image_path="text_visualization.png",
-        # adjust for your computer - should point to a monospace font
         font_path=MONOSPACE_FONT_PATH
     )
 
