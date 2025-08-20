@@ -1,15 +1,79 @@
+import os
+import subprocess
+import textwrap
 from math import ceil
+from math import floor
 
 from PIL import Image, ImageDraw, ImageFont
-import textwrap
 
 IMAGE_PADDING = 10
 LINE_CHAR_LIMIT = 150
 # The desired ratio of width to height (the number of "widths" for each "height").
-TARGET_ASPECT_RATIO = 0.5
+TARGET_ASPECT_RATIO = 1
 
 
-def text_to_image(text_file_path, output_image_path, font_path=None):
+def main():
+    if LINE_CHAR_LIMIT < 40:
+        print("Error: Line character limit must be at least 40.")
+        exit(1)
+
+    print("Enter a path to the root of a repository to visualize:")
+    path = input()
+
+    repo_contents = assemble_repository_into_string(path)
+
+    text_to_image(
+        text=repo_contents,
+        output_image_path="text_visualization.png",
+        # adjust for your computer - should point to a monospace font
+        font_path="/usr/share/fonts/truetype/ubuntu/UbuntuMono[wght].ttf"
+    )
+
+
+def assemble_repository_into_string(repo_path: str) -> str:
+    assembled_string = ""
+
+    if not os.path.isdir(repo_path):
+        print("Error: Path must be a directory.")
+        exit(1)
+
+    branch_name = run_command("git branch --show-current")
+    repo_filenames = run_command(f"git ls-tree -r {branch_name} --name-only").split("\n")
+
+    for repo_filename in repo_filenames:
+        print(f'Reading {repo_filename}')
+
+        if len(repo_filename) > LINE_CHAR_LIMIT:
+            formatted_filename = repo_filename[:22] + '...' + repo_filename[-(LINE_CHAR_LIMIT - 25):]
+        else:
+            empty_space_length = floor((LINE_CHAR_LIMIT - len(repo_filename)) / 2)
+            formatted_filename = '*' * empty_space_length + repo_filename + '*' * empty_space_length
+
+        assembled_string += f"""
+
+{formatted_filename}
+
+"""
+
+        try:
+            with open(repo_path + "/" + repo_filename, 'r', encoding='utf-8') as repo_file:
+                assembled_string += repo_file.read()
+        except UnicodeDecodeError:
+            assembled_string += '(Binary file)'
+
+    print('All files read.')
+
+    return assembled_string
+
+
+def run_command(command: str) -> str:
+    # os.popen(command).read()
+    # return subprocess.call(command, text=True)
+    process = subprocess.Popen(command.split(' '), stdout=subprocess.PIPE, text=True)
+    return process.stdout.read().strip()
+
+
+def text_to_image(text: str, output_image_path: str, font_path: str = None):
     # Load the font
     try:
         font = ImageFont.truetype(font_path or "error", 12)
@@ -18,10 +82,6 @@ def text_to_image(text_file_path, output_image_path, font_path=None):
             "Font not found. Using default PIL font, but this is not a monospace font - things will not line up perfectly.")
         font = ImageFont.load_default()
 
-    # Read the text file
-    with open(text_file_path, 'r', encoding='utf-8') as file:
-        text_content = file.read()
-
     # Define the starting position and line height
     x_pos, y_pos = IMAGE_PADDING, IMAGE_PADDING
     # A reliable way to get line height + a little spacing
@@ -29,12 +89,12 @@ def text_to_image(text_file_path, output_image_path, font_path=None):
     # Get the max line width - it should be the same regardless of the content if the font is monospaced
     line_width = font.getbbox("a" * LINE_CHAR_LIMIT)[2]
 
-    original_lines = text_content.split('\n')
+    original_lines = text.split('\n')
 
     # Count total lines after wrapping (including paragraph spacing as in drawing)
     wrapped_lines = []
     for line in original_lines:
-        wrapped_line = textwrap.wrap(line, width=LINE_CHAR_LIMIT)
+        wrapped_line = [""] if line == "" else textwrap.wrap(line, width=LINE_CHAR_LIMIT)
         wrapped_lines += wrapped_line
     lines_count = len(wrapped_lines)
 
@@ -106,18 +166,4 @@ def calculate_optimal_columns(line_width, line_height, lines_count):
 
 
 if __name__ == "__main__":
-    # Create a dummy text file for testing
-    with open("sample_text.txt", "w") as f:
-        f.write("a" * 500 + "\n")
-        f.write("This is a test paragraph with some text. This is a test paragraph with some text. " * 20 + "\n")
-        f.write(
-            "This is a second paragraph. " * 20 + "\n")
-        f.write("And here is a third paragraph. The patterns of these paragraphs should be visible in the image. " * 20 + "\n")
-        f.write("z " * 20000)
-
-    # Run the function
-    text_to_image(
-        text_file_path="sample_text.txt",
-        output_image_path="text_visualization.png",
-        font_path="/usr/share/fonts/truetype/ubuntu/UbuntuMono[wght].ttf" # adjust for your computer - should be monospace
-    )
+    main()
